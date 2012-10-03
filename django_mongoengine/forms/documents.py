@@ -262,7 +262,6 @@ class BaseDocumentForm(BaseForm):
     def __init__(self, data=None, files=None, auto_id='id_%s', prefix=None,
                  initial=None, error_class=ErrorList, label_suffix=':',
                  empty_permitted=False, instance=None):
-
         opts = self._meta
 
         if instance is None:
@@ -403,7 +402,6 @@ class BaseDocumentForm(BaseForm):
         else:
             update = {}
             for name, data in self.cleaned_data.iteritems():
-
                 try:
                     if isinstance(data, datetime.datetime):
                         data = data.replace(tzinfo=None)
@@ -517,11 +515,53 @@ class BaseDocumentFormSet(BaseFormSet):
             return len(self.get_queryset())
         return super(BaseDocumentFormSet, self).initial_form_count()
 
+    def _existing_object(self, pk):
+        if not hasattr(self, '_object_dict'):
+            self._object_dict = dict([(o.pk, o) for o in self.get_queryset()])
+        return self._object_dict.get(pk)
+
+    def _construct_form(self, i, **kwargs):
+        """
+        Instantiates and returns the i-th form instance in a formset.
+        """
+        if self.is_bound and i < self.initial_form_count():
+            # Import goes here instead of module-level because importing
+            # django.db has side effects.
+            # from django.db import connections
+            # pk_key = "%s-%s" % (self.add_prefix(i), self.model._meta.pk.name)
+            # pk = self.data[pk_key]
+            # pk_field = self.model._meta.pk
+            # pk = pk_field.get_db_prep_lookup('exact', pk,
+            #     connection=connections[self.get_queryset().db])
+            # pk = self.document.
+            # if isinstance(pk, list):
+            #     pk = pk[0]
+            #kwargs['instance'] = self._existing_object(pk)
+
+            #TODO : Django's BaseModelFormSet generate for each ModelForm a hidden field
+            #       named form-#-id, which represent instance.pk. We need to investigate
+            #       why this is not done by our forms. This block should imitate the
+            #       behavior in the comment block above.
+
+            pass
+        if i < self.initial_form_count() and not kwargs.get('instance'):
+            kwargs['instance'] = self.get_queryset()[i]
+
+        #TODO : check what is initial_extra and mimic
+
+        # if i >= self.initial_form_count() and self.initial_extra:
+        #     # Set initial values for extra forms
+        #     try:
+        #         kwargs['initial'] = self.initial_extra[i - self.initial_form_count()]
+        #     except IndexError:
+        #         pass
+        return super(BaseDocumentFormSet, self)._construct_form(i, **kwargs)
+
     def get_queryset(self):
         return self._queryset
 
-    def save_object(self, form):
-        obj = form.save(commit=False)
+    def save_object(self, form, commit=False):
+        obj = form.save(commit=commit)
         return obj
 
     def save(self, commit=True):
@@ -533,9 +573,11 @@ class BaseDocumentFormSet(BaseFormSet):
         for form in self.forms:
             if not form.has_changed() and not form in self.initial_forms:
                 continue
-            obj = self.save_object(form)
 
-            if form in self.deleted_forms:
+            if not form in self.deleted_forms:
+                obj = self.save_object(form, commit=commit)
+            else:
+                obj = form.instance
                 try:
                     obj.delete()
                 except AttributeError:
