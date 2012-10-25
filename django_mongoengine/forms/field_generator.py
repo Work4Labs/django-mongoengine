@@ -30,7 +30,7 @@ class MongoFormFieldGenerator(object):
             if hasattr(self, 'generate_%s' % cls_name):
                 return getattr(self, 'generate_%s' % cls_name)(field, **kwargs)
 
-        if default:
+        if charfield_default:
             # Default to a normal CharField
             # TODO: Somehow add a warning
             defaults = {'required': field.required}
